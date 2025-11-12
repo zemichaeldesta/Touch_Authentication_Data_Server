@@ -1,13 +1,16 @@
 from __future__ import annotations
-import os
+
 import json
 from datetime import datetime
+import os
 from pathlib import Path
 from typing import List
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, validator
+
 
 DATA_ROOT = Path("data")
 DATA_ROOT.mkdir(exist_ok=True, parents=True)
@@ -16,7 +19,6 @@ ALLOWED_ORIGINS_RAW = os.getenv("ALLOWED_ORIGINS", "*")
 ALLOWED_ORIGINS: List[str] = [
     origin.strip() for origin in ALLOWED_ORIGINS_RAW.split(",") if origin.strip()
 ]
-
 
 EVENTS_HEADER = (
     "session_id,user_id,task,phase,t_ms,type,x,y,pressure,tiltX,tiltY,extra,json"
@@ -102,6 +104,13 @@ def ensure_directory(user_id: str) -> Path:
     return target_dir
 
 
+def resolve_single_file(pattern: str) -> Path:
+    matches = sorted(DATA_ROOT.glob(pattern))
+    if not matches:
+        raise HTTPException(status_code=404, detail="File not found")
+    return matches[-1]
+
+
 @app.post("/upload")
 async def upload(payload: UploadPayload):
     directory = ensure_directory(payload.user.user_id)
@@ -127,7 +136,7 @@ async def upload(payload: UploadPayload):
             payload.sessions_csv.strip() + "\n", encoding="utf-8"
         )
 
-    return {
+    response = {
         "ok": True,
         "saved": {
             "events_csv": str(events_path),
@@ -135,6 +144,15 @@ async def upload(payload: UploadPayload):
             "events_json": str(events_json_path),
         },
     }
+    public_base = os.getenv("PUBLIC_BASE_URL")
+    if public_base:
+        base = public_base.rstrip("/")
+        response["urls"] = {
+            "events_csv": f"{base}/files/{payload.user.user_id}/{payload.session.session_id}/events.csv",
+            "events_json": f"{base}/files/{payload.user.user_id}/{payload.session.session_id}/events.json",
+            "sessions_csv": f"{base}/files/{payload.user.user_id}/sessions.csv",
+        }
+    return response
 
 
 @app.post("/delete_session")
@@ -150,4 +168,24 @@ async def delete_session(payload: DeletePayload):
     if not removed:
         raise HTTPException(status_code=404, detail="Session files not found")
     return {"ok": True, "removed": removed}
+
+
+@app.get("/files/{user_id}/{session_id}/events.csv")
+async def download_events_csv(user_id: str, session_id: str):
+    path = resolve_single_file(f"*/{user_id}/events_{session_id}.csv")
+    return FileResponse(path, filename=f"events_{session_id}.csv", media_type="text/csv")
+
+
+@app.get("/files/{user_id}/{session_id}/events.json")
+async def download_events_json(user_id: str, session_id: str):
+    path = resolve_single_file(f"*/{user_id}/events_{session_id}.json")
+    return FileResponse(
+        path, filename=f"events_{session_id}.json", media_type="application/json"
+    )
+
+
+@app.get("/files/{user_id}/sessions.csv")
+async def download_sessions_csv(user_id: str):
+    path = resolve_single_file(f"*/{user_id}/sessions.csv")
+    return FileResponse(path, filename="sessions.csv", media_type="text/csv")
 
