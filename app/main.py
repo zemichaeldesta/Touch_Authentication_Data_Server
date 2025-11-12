@@ -12,7 +12,11 @@ from pydantic import BaseModel, Field, validator
 DATA_ROOT = Path("data")
 DATA_ROOT.mkdir(exist_ok=True, parents=True)
 
-ALLOWED_ORIGINS: List[str] = ["https://touchbio-staging.example.com"]
+ALLOWED_ORIGINS_RAW = os.getenv("ALLOWED_ORIGINS", "*")
+ALLOWED_ORIGINS: List[str] = [
+    origin.strip() for origin in ALLOWED_ORIGINS_RAW.split(",") if origin.strip()
+]
+
 
 EVENTS_HEADER = (
     "session_id,user_id,task,phase,t_ms,type,x,y,pressure,tiltX,tiltY,extra,json"
