@@ -27,8 +27,17 @@ MANAGER_PASSWORD = os.getenv("MANAGER_PASSWORD", "admin123")  # Change this!
 JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key-change-this")
 JWT_ALGORITHM = "HS256"
 
-# Initialize MongoDB
-client = AsyncIOMotorClient(MONGO_URI)
+# Initialize MongoDB with proper SSL/TLS settings
+# MongoDB Atlas requires TLS by default for mongodb+srv connections
+client = AsyncIOMotorClient(
+    MONGO_URI,
+    serverSelectionTimeoutMS=30000,
+    connectTimeoutMS=30000,
+    socketTimeoutMS=30000,
+    tls=True,
+    tlsAllowInvalidCertificates=False,
+)
+
 db = client[DB_NAME]
 events_collection = db["events"]
 sessions_collection = db["sessions"]
@@ -121,6 +130,21 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Test MongoDB connection on startup"""
+    try:
+        await client.admin.command('ping')
+        print("✅ MongoDB connection successful")
+    except Exception as e:
+        print(f"⚠️ MongoDB connection warning: {e}")
+        print("⚠️ The app will still start, but database operations may fail.")
+        print("⚠️ Please check:")
+        print("   1. MongoDB Atlas IP whitelist (add 0.0.0.0/0 for Render)")
+        print("   2. Connection string is correct")
+        print("   3. Database user has proper permissions")
 
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
