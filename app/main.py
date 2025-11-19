@@ -52,7 +52,7 @@ ALLOWED_ORIGINS: List[str] = [
 ]
 
 EVENTS_HEADER = (
-    "session_id,user_id,task,phase,t_ms,type,x,y,pressure,tiltX,tiltY,extra,json"
+    "session_id,user_id,task,phase,t_ms,type,x,y,pressure,width,height,tiltX,tiltY,extra,json"
 )
 SESSIONS_HEADER = (
     "session_id,user_id,started_at_iso,ended_at_iso,device_w,device_h,dpr,"
